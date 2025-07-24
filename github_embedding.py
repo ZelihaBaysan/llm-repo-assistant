@@ -4,8 +4,7 @@ from llama_index.core import Document
 from llama_index.core.ingestion import IngestionPipeline
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import BaseNode
-from llama_index.core import download_loader
-from github import Github
+from llama_index.readers.github import GithubRepositoryReader, GithubClient
 
 class VectorStoreProtocol:
     def add(self, nodes: Sequence[BaseNode]) -> None:
@@ -67,10 +66,10 @@ class GitHubEmbeddingMethod:
         return filtered_docs
 
     def get_documents(self, data_source_id: str) -> List[Document]:
-        GithubRepositoryReader = download_loader("GithubRepositoryReader")
-        
-        # GitHub client oluştur
-        github_client = Github(self.github_token) if self.github_token else None
+        github_client = GithubClient(
+            github_token=self.github_token,
+            verbose=self.verbose
+        )
         
         loader = GithubRepositoryReader(
             github_client=github_client,
@@ -78,11 +77,16 @@ class GitHubEmbeddingMethod:
             repo=self.repo,
             use_parser=self.use_parser,
             verbose=self.verbose,
-            ignore_directories=self.ignore_directories,
-            ignore_file_extensions=self.ignore_file_extensions,
+            filter_directories=(
+                self.ignore_directories, 
+                GithubRepositoryReader.FilterType.EXCLUDE
+            ),
+            filter_file_extensions=(
+                self.ignore_file_extensions,
+                GithubRepositoryReader.FilterType.EXCLUDE
+            ),
         )
         
-        # Branch parametresini load_data metodunda kullan
         documents = loader.load_data(branch=self.branch)
         for document in documents:
             self.customize_metadata(document, data_source_id)

@@ -21,7 +21,7 @@ class SimpleTaskManager:
 embedder = GitHubEmbeddingMethod(
     owner="ZelihaBaysan",
     repo="ZelihaBaysan",
-    branch="main",  # Branch artık load_data'da kullanılıyor
+    branch="main",
     github_token=os.environ.get("GITHUB_TOKEN"),
     ignore_directories=["node_modules", "dist", "tests"],
     ignore_file_extensions=[".png", ".jpg", ".md"]
