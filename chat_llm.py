@@ -3,41 +3,79 @@ from llama_index.llms.ollama import Ollama
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 import chromadb
+from llama_index.core.memory import ChatMemoryBuffer
 
-# Embedding model ayarı
+# Gelişmiş ayarlar
 Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
+Settings.llm = Ollama(model="gemma:7b", request_timeout=120.0)
+Settings.chunk_size = 512
+Settings.chunk_overlap = 50
 
-# Ollama Gemma modeli
-Settings.llm = Ollama(model="gemma:7b", request_timeout=60.0)
+def initialize_chat_engine():
+    try:
+        # ChromaDB bağlantısı
+        db = chromadb.PersistentClient(path="./chroma_db")
+        chroma_collection = db.get_or_create_collection("github_repos")
+        
+        # Vektör deposunu kontrol et
+        if chroma_collection.count() == 0:
+            raise ValueError("Vektör deposu boş! Lütfen önce index.py ile verileri indeksleyin.")
+        
+        vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+        
+        # Bellek (geçmiş konuşmalar) ayarı
+        memory = ChatMemoryBuffer.from_defaults(token_limit=4000)
+        
+        # Index oluştur
+        index = VectorStoreIndex.from_vector_store(
+            vector_store,
+            embed_model=Settings.embed_model
+        )
+        
+        # Sohbet motorunu oluştur
+        query_engine = index.as_chat_engine(
+            chat_mode="condense_plus_context",
+            verbose=True,
+            memory=memory,
+            system_prompt=(
+                "Sen bir GitHub repository uzmanısın. "
+                "Kullanıcıların repository ile ilgili teknik sorularını detaylı ve açıklayıcı şekilde yanıtlıyorsun. "
+                "Eğer bir konuda emin değilsen, 'Bilmiyorum' demekten çekinme."
+            )
+        )
+        return query_engine
+        
+    except Exception as e:
+        print(f"Başlatma hatası: {str(e)}")
+        return None
 
-# ChromaDB vektör veritabanı
-db = chromadb.PersistentClient(path="./chroma_db")
-chroma_collection = db.get_or_create_collection("github_repos")
-vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-
-# Vektör indeksini oluştur
-try:
-    index = VectorStoreIndex.from_vector_store(vector_store)
-    print("Vektör indeksi başarıyla yüklendi!")
+def main():
+    print("\nGitHub Repo Sohbet Asistanı (Gemma 7B) - Çıkmak için 'exit' yazın")
     
-    # Sohbet motorunu başlat
-    query_engine = index.as_chat_engine(
-        chat_mode="condense_plus_context",
-        verbose=True,
-        system_prompt="You're an expert on the given GitHub repository. Provide detailed answers about the codebase."
-    )
+    query_engine = initialize_chat_engine()
+    if not query_engine:
+        return
+    
+    try:
+        while True:
+            query = input("\nKullanıcı: ").strip()
+            if query.lower() in ['exit', 'quit', 'çık']:
+                break
+                
+            if not query:
+                print("Lütfen geçerli bir soru girin.")
+                continue
+                
+            try:
+                response = query_engine.chat(query)
+                print(f"\nAsistan: {response}")
+            except Exception as e:
+                print(f"\nSoru işlenirken hata oluştu: {str(e)}")
+                
+    except KeyboardInterrupt:
+        print("\nProgram sonlandırılıyor...")
+    finally:
+        print("Görüşmek üzere!")
 
-    # Kullanıcı etkileşimi
-    print("GitHub Repo Sohbet Asistanı (Gemma 7B) - Çıkmak için 'exit' yazın")
-    while True:
-        query = input("\nKullanıcı: ")
-        if query.lower() == "exit":
-            break
-        try:
-            response = query_engine.chat(query)
-            print(f"\nAsistan: {response}")
-        except Exception as e:
-            print(f"\nHata: {str(e)}")
-            
-except Exception as e:
-    print(f"Vektör indeksi yüklenirken hata oluştu: {str(e)}")
+if __name__ == "__main__":
+    main()

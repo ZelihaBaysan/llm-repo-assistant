@@ -20,7 +20,7 @@ class SimpleTaskManager:
 # Indexleme işlemi
 embedder = GitHubEmbeddingMethod(
     owner="ZelihaBaysan",
-    repo="ZelihaBaysan",
+    repo="test-llm-repo-assistant",
     branch="main",
     github_token=os.environ.get("GITHUB_TOKEN"),
     ignore_directories=["node_modules", "dist", "tests"],
