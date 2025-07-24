@@ -1,56 +1,47 @@
-from llama_index.core import VectorStoreIndex, Settings
-from llama_index.llms.ollama import Ollama
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.core import VectorStoreIndex
 from llama_index.vector_stores.chroma import ChromaVectorStore
 import chromadb
 from llama_index.core.memory import ChatMemoryBuffer
+import logging
+from settings import initialize_settings
 
-# Gelişmiş ayarlar
-Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
-Settings.llm = Ollama(model="gemma:7b", request_timeout=120.0)
-Settings.chunk_size = 512
-Settings.chunk_overlap = 50
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Ayarları başlat
+initialize_settings()
 
 def initialize_chat_engine():
     try:
         # ChromaDB bağlantısı
         db = chromadb.PersistentClient(path="./chroma_db")
-        chroma_collection = db.get_or_create_collection("github_repos")
+        chroma_collection = db.get_collection("github_repos")
         
-        # Vektör deposunu kontrol et
-        if chroma_collection.count() == 0:
-            raise ValueError("Vektör deposu boş! Lütfen önce index.py ile verileri indeksleyin.")
+        count = chroma_collection.count()
+        logger.info(f"Vektör deposunda {count} doküman bulundu")
         
-        vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-        
-        # Bellek (geçmiş konuşmalar) ayarı
-        memory = ChatMemoryBuffer.from_defaults(token_limit=4000)
+        if count == 0:
+            raise ValueError("Vektör deposu boş! Lütfen önce index.py'yi çalıştırın.")
         
         # Index oluştur
-        index = VectorStoreIndex.from_vector_store(
-            vector_store,
-            embed_model=Settings.embed_model
-        )
+        vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+        index = VectorStoreIndex.from_vector_store(vector_store)
         
-        # Sohbet motorunu oluştur
-        query_engine = index.as_chat_engine(
+        # Sohbet motoru
+        return index.as_chat_engine(
             chat_mode="condense_plus_context",
             verbose=True,
-            memory=memory,
-            system_prompt=(
-                "Sen bir GitHub repository uzmanısın. "
-                "Kullanıcıların repository ile ilgili teknik sorularını detaylı ve açıklayıcı şekilde yanıtlıyorsun. "
-                "Eğer bir konuda emin değilsen, 'Bilmiyorum' demekten çekinme."
-            )
+            memory=ChatMemoryBuffer.from_defaults(token_limit=4000),
+            system_prompt="Sen bir GitHub repository uzmanısın. Teknik soruları detaylıca yanıtlıyorsun."
         )
-        return query_engine
         
     except Exception as e:
-        print(f"Başlatma hatası: {str(e)}")
+        logger.error(f"Başlatma hatası: {str(e)}")
         return None
 
 def main():
-    print("\nGitHub Repo Sohbet Asistanı (Gemma 7B) - Çıkmak için 'exit' yazın")
+    logger.info("\n=== GitHub Repo Sohbet Asistanı ===")
+    logger.info("Çıkmak için 'exit' yazın\n")
     
     query_engine = initialize_chat_engine()
     if not query_engine:
@@ -58,24 +49,20 @@ def main():
     
     try:
         while True:
-            query = input("\nKullanıcı: ").strip()
+            query = input("Kullanıcı: ").strip()
             if query.lower() in ['exit', 'quit', 'çık']:
                 break
                 
-            if not query:
-                print("Lütfen geçerli bir soru girin.")
-                continue
-                
             try:
                 response = query_engine.chat(query)
-                print(f"\nAsistan: {response}")
+                print(f"\nAsistan: {response}\n")
             except Exception as e:
-                print(f"\nSoru işlenirken hata oluştu: {str(e)}")
+                logger.error(f"Soru işlenirken hata: {str(e)}")
                 
     except KeyboardInterrupt:
-        print("\nProgram sonlandırılıyor...")
+        logger.info("\nProgram sonlandırılıyor...")
     finally:
-        print("Görüşmek üzere!")
+        logger.info("Görüşmek üzere!")
 
 if __name__ == "__main__":
     main()
