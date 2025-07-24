@@ -29,13 +29,13 @@ embedder = GitHubEmbeddingMethod(
 
 try:
     embedder.process(
-        vector_store=vector_store,
-        task_manager=SimpleTaskManager(),
-        data_source_id="github_repo",
-        task_id="index_task_001",
-        inclusion_rules=["src", "lib"],
-        exclusion_rules=["test", "example"]
-    )
+    vector_store=vector_store,
+    task_manager=SimpleTaskManager(),
+    data_source_id="test_repo",
+    task_id="index_task_001",
+    inclusion_rules=[],  
+    exclusion_rules=["test"]  
+)
     print("Indexleme başarıyla tamamlandı!")
 except Exception as e:
     print(f"Indexleme hatası: {str(e)}")

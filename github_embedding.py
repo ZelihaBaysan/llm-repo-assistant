@@ -6,19 +6,24 @@ from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import BaseNode
 from llama_index.readers.github import GithubRepositoryReader, GithubClient
 
+
 class VectorStoreProtocol:
     def add(self, nodes: Sequence[BaseNode]) -> None:
         pass
 
+
 class TaskManagerProtocol:
     def init_task(self, task_id: str) -> None:
         pass
+
     def update_task(self, task_id: str, status: str) -> None:
         pass
+
 
 class TaskStatus:
     DONE = "DONE"
     ERROR = "ERROR"
+
 
 class GitHubEmbeddingMethod:
     def __init__(
@@ -58,11 +63,18 @@ class GitHubEmbeddingMethod:
     ) -> Sequence[Document]:
         filtered_docs = []
         for doc in documents:
-            file_path = doc.metadata.get("file_path", "")
-            if any(excl in file_path for excl in exclusion_rules):
+            file_path = doc.metadata.get("file_path", "").lower()
+            file_name = doc.metadata.get("file_name", "").lower()
+
+            # Exclusion kontrolü
+            if any(excl.lower() in file_path or excl.lower() in file_name for excl in exclusion_rules):
                 continue
-            if not inclusion_rules or any(incl in file_path for incl in inclusion_rules):
+
+            # Inclusion kontrolü (eğer inclusion_rules boşsa tümünü kabul et)
+            if not inclusion_rules or any(incl.lower() in file_path or incl.lower() in file_name for incl in inclusion_rules):
                 filtered_docs.append(doc)
+
+        print(f"Filtreleme detayı: {len(documents)} -> {len(filtered_docs)} doküman")
         return filtered_docs
 
     def get_documents(self, data_source_id: str) -> List[Document]:
@@ -70,7 +82,7 @@ class GitHubEmbeddingMethod:
             github_token=self.github_token,
             verbose=self.verbose
         )
-        
+
         loader = GithubRepositoryReader(
             github_client=github_client,
             owner=self.owner,
@@ -78,7 +90,7 @@ class GitHubEmbeddingMethod:
             use_parser=self.use_parser,
             verbose=self.verbose,
             filter_directories=(
-                self.ignore_directories, 
+                self.ignore_directories,
                 GithubRepositoryReader.FilterType.EXCLUDE
             ),
             filter_file_extensions=(
@@ -86,7 +98,7 @@ class GitHubEmbeddingMethod:
                 GithubRepositoryReader.FilterType.EXCLUDE
             ),
         )
-        
+
         documents = loader.load_data(branch=self.branch)
         for document in documents:
             self.customize_metadata(document, data_source_id)
@@ -114,18 +126,18 @@ class GitHubEmbeddingMethod:
             print(f"[{task_id}] Dokümanlar yükleniyor...")
             documents = self.get_documents(data_source_id)
             print(f"[{task_id}] {len(documents)} doküman yüklendi")
-            
+
             documents = self.apply_rules(
                 documents,
                 inclusion_rules=kwargs.get("inclusion_rules", []),
                 exclusion_rules=kwargs.get("exclusion_rules", []),
             )
             print(f"[{task_id}] {len(documents)} doküman filtreleme sonrası")
-            
+
             print(f"[{task_id}] Düğümler oluşturuluyor...")
             nodes = self.get_nodes(documents)
             print(f"[{task_id}] {len(nodes)} düğüm oluşturuldu")
-            
+
             print(f"[{task_id}] Vektör deposuna ekleniyor...")
             vector_store.add(nodes)
             task_manager.update_task(task_id, TaskStatus.DONE)
